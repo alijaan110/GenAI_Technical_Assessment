@@ -315,10 +315,10 @@ export default function RagPage() {
                         m.map((msg) =>
                             msg.id === aiId
                                 ? {
-                                      ...msg,
-                                      is_grounded: payload?.is_grounded ? 1 : 0,
-                                      retrieval_score: payload?.retrieval_score ?? null,
-                                  }
+                                    ...msg,
+                                    is_grounded: payload?.is_grounded ? 1 : 0,
+                                    retrieval_score: payload?.retrieval_score ?? null,
+                                }
                                 : msg
                         )
                     );
@@ -327,11 +327,11 @@ export default function RagPage() {
                         m.map((msg) =>
                             msg.id === aiId
                                 ? {
-                                      ...msg,
-                                      content:
-                                          (msg.content || "") +
-                                          `\n\n**Error:** ${payload?.message || "stream failed"}`,
-                                  }
+                                    ...msg,
+                                    content:
+                                        (msg.content || "") +
+                                        `\n\n**Error:** ${payload?.message || "stream failed"}`,
+                                }
                                 : msg
                         )
                     );
@@ -342,6 +342,8 @@ export default function RagPage() {
                 const { value, done } = await reader.read();
                 if (done) break;
                 buffer += decoder.decode(value, { stream: true });
+                // Normalize \r\n to \n — sse_starlette sends \r\n on Windows
+                buffer = buffer.replace(/\r\n/g, "\n");
 
                 // SSE events are separated by a blank line.
                 let idx;
@@ -372,12 +374,12 @@ export default function RagPage() {
                 m.map((msg) =>
                     msg.id === aiId
                         ? {
-                              ...msg,
-                              content:
-                                  (msg.content || "") +
-                                  `\n\n**Error:** ${err?.message || "Request failed"}`,
-                              is_grounded: 0,
-                          }
+                            ...msg,
+                            content:
+                                (msg.content || "") +
+                                `\n\n**Error:** ${err?.message || "Request failed"}`,
+                            is_grounded: 0,
+                        }
                         : msg
                 )
             );
@@ -413,11 +415,10 @@ export default function RagPage() {
                         <div
                             key={s.id}
                             onClick={() => renamingSession !== s.id && loadSession(s.id)}
-                            className={`group flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${
-                                activeSession === s.id
+                            className={`group flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${activeSession === s.id
                                     ? "bg-accent/10 text-accent"
                                     : "hover:bg-secondary/40"
-                            }`}
+                                }`}
                         >
                             <div className="flex items-center gap-2 min-w-0 flex-1">
                                 <MessagesSquare className="w-4 h-4 shrink-0" />
@@ -561,11 +562,10 @@ export default function RagPage() {
                     <h3 className="font-semibold text-sm mb-3">Upload PDF</h3>
                     <div
                         {...getRootProps()}
-                        className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors ${
-                            isDragActive
+                        className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors ${isDragActive
                                 ? "border-accent bg-accent/5"
                                 : "border-primary/30 hover:bg-secondary/30"
-                        }`}
+                            }`}
                     >
                         <input {...getInputProps()} />
                         <UploadCloud className="w-8 h-8 text-accent mx-auto mb-2" />
@@ -608,13 +608,12 @@ export default function RagPage() {
                                         {d.doc_type || "doc"}
                                     </span>
                                     <span
-                                        className={`font-medium ${
-                                            d.status === "completed"
+                                        className={`font-medium ${d.status === "completed"
                                                 ? "text-green-600"
                                                 : d.status === "failed"
-                                                  ? "text-red-500"
-                                                  : "text-orange-500"
-                                        }`}
+                                                    ? "text-red-500"
+                                                    : "text-orange-500"
+                                            }`}
                                     >
                                         {d.status}
                                     </span>

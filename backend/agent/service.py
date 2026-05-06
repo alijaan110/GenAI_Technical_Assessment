@@ -35,9 +35,34 @@ async def run_agent(query: str, enable_hitl: bool) -> str:
     return run_id
 
 
+def _is_interrupted(app, config) -> bool:
+    """Check if the graph is paused at an interrupt (HITL)."""
+    try:
+        state = app.get_state(config)
+        # LangGraph sets `state.next` to the tuple of pending nodes
+        # when the graph is interrupted. If non-empty, we're paused.
+        return bool(state.next)
+    except Exception:
+        return False
+
+
 async def _execute(run_id: str, query: str, enable_hitl: bool, thread_id: str) -> None:
     db = get_db()
     start = time.time()
+
+    # ── Pre-flight: validate that the LLM is reachable before running the
+    #    full graph.
+    try:
+        from backend.llm import get_llm
+        get_llm()  # will raise RuntimeError if key is missing
+    except Exception as e:
+        with db:
+            db.execute(
+                "UPDATE agent_runs SET status='failed', error_log=? WHERE id=?",
+                (f"LLM configuration error: {e}", run_id),
+            )
+        return
+
     app = get_graph()
     config = {"configurable": {"thread_id": thread_id}}
 
@@ -47,10 +72,11 @@ async def _execute(run_id: str, query: str, enable_hitl: bool, thread_id: str) -
             config=config,
         )
     except GraphInterrupt:
-        # Graph paused at human_input — leave status as awaiting_clarification,
-        # nodes.human_input already wrote it.
+        # Older LangGraph versions raise this on interrupt.
         return
     except Exception as e:
+        import traceback, sys
+        traceback.print_exc(file=sys.stderr)
         with db:
             db.execute(
                 "UPDATE agent_runs SET status='failed', error_log=? WHERE id=?",
@@ -58,28 +84,31 @@ async def _execute(run_id: str, query: str, enable_hitl: bool, thread_id: str) -
             )
         return
 
-    if result.get("final_output"):
-        elapsed = time.time() - start
-        with db:
-            db.execute(
-                """UPDATE agent_runs
-                   SET status='completed', final_output=?, output_format=?,
-                       summary=?, execution_time_seconds=?, completed_at=CURRENT_TIMESTAMP
-                 WHERE id=?""",
-                (
-                    result["final_output"],
-                    result.get("output_format"),
-                    result.get("summary"),
-                    elapsed,
-                    run_id,
-                ),
-            )
-    else:
-        with db:
-            db.execute(
-                "UPDATE agent_runs SET status='awaiting_clarification' WHERE id=?",
-                (run_id,),
-            )
+    # ── Check whether the graph paused at an interrupt (HITL) ──────────
+    # With MemorySaver, interrupt() does NOT raise GraphInterrupt —
+    # ainvoke() returns a partial result. We detect it by checking
+    # whether the graph has pending next-nodes.
+    if _is_interrupted(app, config):
+        # human_input node already set status='awaiting_clarification'
+        return
+
+    # ── Normal completion ──────────────────────────────────────────────
+    elapsed = time.time() - start
+    final = result.get("final_output") or "(no output generated)"
+    with db:
+        db.execute(
+            """UPDATE agent_runs
+               SET status='completed', final_output=?, output_format=?,
+                   summary=?, execution_time_seconds=?, completed_at=CURRENT_TIMESTAMP
+             WHERE id=?""",
+            (
+                final,
+                result.get("output_format"),
+                result.get("summary"),
+                elapsed,
+                run_id,
+            ),
+        )
 
 
 async def resume_agent(run_id: str, user_reply: str) -> None:
@@ -102,6 +131,8 @@ async def resume_agent(run_id: str, user_reply: str) -> None:
     except GraphInterrupt:
         return
     except Exception as e:
+        import traceback, sys
+        traceback.print_exc(file=sys.stderr)
         with db:
             db.execute(
                 "UPDATE agent_runs SET status='failed', error_log=? WHERE id=?",
@@ -109,21 +140,26 @@ async def resume_agent(run_id: str, user_reply: str) -> None:
             )
         return
 
-    if result.get("final_output"):
-        elapsed = time.time() - start
-        with db:
-            db.execute(
-                """UPDATE agent_runs
-                   SET status='completed', final_output=?, output_format=?,
-                       summary=?,
-                       execution_time_seconds=COALESCE(execution_time_seconds,0)+?,
-                       completed_at=CURRENT_TIMESTAMP
-                 WHERE id=?""",
-                (
-                    result["final_output"],
-                    result.get("output_format"),
-                    result.get("summary"),
-                    elapsed,
-                    run_id,
-                ),
-            )
+    # Check for another interrupt (nested HITL — unlikely but robust)
+    if _is_interrupted(app, config):
+        return
+
+    # ── Normal completion after resume ─────────────────────────────────
+    elapsed = time.time() - start
+    final = result.get("final_output") or "(no output generated)"
+    with db:
+        db.execute(
+            """UPDATE agent_runs
+               SET status='completed', final_output=?, output_format=?,
+                   summary=?,
+                   execution_time_seconds=COALESCE(execution_time_seconds,0)+?,
+                   completed_at=CURRENT_TIMESTAMP
+             WHERE id=?""",
+            (
+                final,
+                result.get("output_format"),
+                result.get("summary"),
+                elapsed,
+                run_id,
+            ),
+        )

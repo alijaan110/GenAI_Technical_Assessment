@@ -86,6 +86,18 @@ def result(run_id: str):
     return dict(row)
 
 
+@router.delete("/api/agent/runs/{run_id}")
+def delete_run(run_id: str):
+    db = get_db()
+    row = db.execute("SELECT id FROM agent_runs WHERE id = ?", (run_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Run not found")
+    with db:
+        db.execute("DELETE FROM agent_steps WHERE run_id = ?", (run_id,))
+        db.execute("DELETE FROM agent_runs WHERE id = ?", (run_id,))
+    return {"success": True}
+
+
 @router.get("/api/agent/history")
 def history():
     db = get_db()

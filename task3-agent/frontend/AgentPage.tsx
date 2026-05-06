@@ -9,6 +9,7 @@ import {
     HelpCircle,
     CheckCircle2,
     AlertTriangle,
+    Trash2,
 } from "lucide-react";
 import Markdown from "../../src/components/Markdown";
 
@@ -50,6 +51,7 @@ export default function AgentPage() {
     const [clarificationReply, setClarificationReply] = useState("");
     const [resuming, setResuming] = useState(false);
     const pollRef = useRef<any>(null);
+    const stepsEndRef = useRef<HTMLDivElement>(null);
 
     const refreshHistory = async () => {
         try {
@@ -90,6 +92,13 @@ export default function AgentPage() {
             if (pollRef.current) clearInterval(pollRef.current);
         };
     }, [activeRunId]);
+
+    // Auto-scroll to bottom of steps when new steps appear
+    useEffect(() => {
+        if (stepsEndRef.current) {
+            stepsEndRef.current.scrollIntoView({ behavior: "smooth" });
+        }
+    }, [status?.steps?.length, status?.final_output]);
 
     const submit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -144,6 +153,20 @@ export default function AgentPage() {
         }
     };
 
+    const deleteRun = async (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        try {
+            await axios.delete(`/api/agent/runs/${id}`);
+            if (activeRunId === id) {
+                setActiveRunId(null);
+                setStatus(null);
+            }
+            refreshHistory();
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
     const awaitingClarification = status?.status === "awaiting_clarification";
 
     return (
@@ -160,22 +183,28 @@ export default function AgentPage() {
                         <p className="text-xs text-text-dark/50 p-3">No runs yet.</p>
                     )}
                     {runs.map((r) => (
-                        <button
+                        <div
                             key={r.id}
-                            type="button"
                             onClick={() => loadRun(r.id)}
-                            className={`w-full text-left p-2.5 rounded-lg border text-xs transition-colors ${
-                                activeRunId === r.id
-                                    ? "border-accent bg-accent/10"
-                                    : "border-primary/20 hover:bg-secondary/30"
-                            }`}
+                            className={`w-full text-left p-2.5 rounded-lg border text-xs transition-colors cursor-pointer group relative ${activeRunId === r.id
+                                ? "border-accent bg-accent/10"
+                                : "border-primary/20 hover:bg-secondary/30"
+                                }`}
                         >
-                            <p className="font-medium line-clamp-2">{r.query}</p>
+                            <button
+                                type="button"
+                                onClick={(e) => deleteRun(r.id, e)}
+                                className="absolute top-1.5 right-1.5 p-1 rounded hover:bg-red-100 text-red-400 hover:text-red-600"
+                                title="Delete run"
+                            >
+                                <Trash2 className="w-3 h-3" />
+                            </button>
+                            <p className="font-medium line-clamp-2 pr-5">{r.query}</p>
                             <div className="mt-1 flex items-center justify-between text-[10px] text-text-dark/60 uppercase">
                                 <StatusBadge status={r.status} />
                                 <span>{new Date(r.started_at).toLocaleTimeString()}</span>
                             </div>
-                        </button>
+                        </div>
                     ))}
                 </div>
             </aside>
@@ -251,8 +280,9 @@ export default function AgentPage() {
                                     Execution steps
                                 </p>
                                 {status.steps?.map((step, idx) => (
-                                    <StepCard key={idx} step={step} idx={idx + 1} last={idx === status.steps.length - 1} />
+                                    <StepCard key={idx} step={step} idx={idx + 1} last={idx === status.steps.length - 1} runStatus={status.status} />
                                 ))}
+                                <div ref={stepsEndRef} />
                             </div>
 
                             {/* Final output */}
@@ -347,20 +377,35 @@ function StepCard({
     step,
     idx,
     last,
+    runStatus,
 }: {
     step: AgentStep;
     idx: number;
     last: boolean;
+    runStatus?: string;
 }) {
-    const isRunning = step.status === "running";
-    const isFailed = step.status === "failed";
-    const isDone = step.status === "completed";
+    // Determine display status:
+    // - If run is awaiting_clarification and step is 'running' → show as 'waiting' (HITL pause)
+    // - If run is terminal (failed/completed) and step is 'running' → show as 'failed' (stale)
+    // - Otherwise → use actual step status
+    const effectiveStatus =
+        step.status === "running" && runStatus === "awaiting_clarification"
+            ? "waiting"
+            : step.status === "running" && (runStatus === "failed" || runStatus === "completed")
+                ? "failed"
+                : step.status;
+    const isRunning = effectiveStatus === "running";
+    const isWaiting = effectiveStatus === "waiting";
+    const isFailed = effectiveStatus === "failed";
+    const isDone = effectiveStatus === "completed";
 
     const dotClass = isFailed
         ? "bg-red-500"
         : isDone
-          ? "bg-green-500"
-          : "bg-accent animate-pulse";
+            ? "bg-green-500"
+            : isWaiting
+                ? "bg-amber-400 animate-pulse"
+                : "bg-accent animate-pulse";
     const icon = isFailed ? "!" : isDone ? "✓" : idx;
 
     return (
@@ -369,24 +414,30 @@ function StepCard({
                 <div
                     className={`w-7 h-7 rounded-full flex items-center justify-center text-xs text-white font-semibold ${dotClass}`}
                 >
-                    {icon}
+                    {isRunning || isWaiting ? <Loader2 className="w-4 h-4 animate-spin" /> : icon}
                 </div>
                 {!last && <div className="w-0.5 flex-1 bg-primary/20 my-1 min-h-[20px]" />}
             </div>
             <div className="flex-1 bg-white border border-primary/20 rounded-xl p-3 shadow-sm">
                 <div className="flex items-center justify-between mb-1.5">
                     <h4 className="font-semibold text-sm text-accent">{step.step_name}</h4>
-                    <span
-                        className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded ${
-                            isFailed
+                    <div className="flex items-center gap-2">
+                        {step.started_at && step.completed_at && (
+                            <span className="text-[10px] text-text-dark/50">
+                                {((new Date(step.completed_at).getTime() - new Date(step.started_at).getTime()) / 1000).toFixed(1)}s
+                            </span>
+                        )}
+                        <span
+                            className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded ${isFailed
                                 ? "bg-red-50 text-red-600"
                                 : isDone
-                                  ? "bg-green-50 text-green-700"
-                                  : "bg-amber-50 text-amber-700"
-                        }`}
-                    >
-                        {step.status}
-                    </span>
+                                    ? "bg-green-50 text-green-700"
+                                    : "bg-amber-50 text-amber-700"
+                                }`}
+                        >
+                            {effectiveStatus}
+                        </span>
+                    </div>
                 </div>
                 {step.error && (
                     <p className="text-xs text-red-600 mb-1">⚠ {step.error}</p>
@@ -440,8 +491,8 @@ function Tag({
         tone === "warn"
             ? "bg-amber-100 text-amber-800 border-amber-200"
             : tone === "muted"
-              ? "bg-secondary/40 text-text-dark/70 border-primary/20"
-              : "bg-accent/10 text-accent border-accent/20";
+                ? "bg-secondary/40 text-text-dark/70 border-primary/20"
+                : "bg-accent/10 text-accent border-accent/20";
     return (
         <span className={`px-1.5 py-0.5 rounded border font-semibold uppercase ${cls}`}>
             {children}

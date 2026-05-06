@@ -118,7 +118,7 @@ LegalRAG/
 ├── task2-rag-eval/frontend/EvalPage.tsx
 ├── task3-agent/frontend/AgentPage.tsx  # Steps timeline · HITL clarification UI
 ├── index.html
-├── vite.config.ts                      # proxies /api → 127.0.0.1:8000 (SSE-friendly)
+├── vite.config.ts                      # proxies /api → 127.0.0.1:8001 (SSE-friendly)
 ├── package.json                        # one-command dev: uvicorn + vite concurrently
 └── tsconfig.json
 ```
@@ -164,13 +164,13 @@ QDRANT_API_KEY=                  # only for Qdrant Cloud
 ### 5. Run
 
 ```bash
-npm run dev          # boots FastAPI :8000 and Vite :5173 concurrently
+npm run dev          # boots FastAPI :8001 and Vite :5173 concurrently
 ```
 
 Or separately:
 
 ```bash
-npm run dev:api      # FastAPI on :8000  (uvicorn --reload)
+npm run dev:api      # FastAPI on :8001  (uvicorn --reload)
 npm run dev:web      # Vite on :5173
 ```
 
@@ -214,7 +214,7 @@ Even the polite out-of-context refusal is streamed in chunks so the UX is consis
 | GET    | `/api/agent/status/{id}`                           | Live step + status polling.                       |
 | POST   | `/api/agent/resume/{id}`                           | Resume a paused (HITL) run.                       |
 
-Interactive docs at `http://127.0.0.1:8000/docs` (FastAPI Swagger UI).
+Interactive docs at `http://127.0.0.1:8001/docs` (FastAPI Swagger UI).
 
 ---
 
