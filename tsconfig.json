@@ -1,0 +1,33 @@
+{
+    "compilerOptions": {
+        "target": "ES2022",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "jsx": "react-jsx",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "outDir": "./dist",
+        "rootDir": ".",
+        "baseUrl": ".",
+        "lib": [
+            "ES2022",
+            "DOM",
+            "DOM.Iterable"
+        ]
+    },
+    "include": [
+        "src",
+        "task1-rag/frontend",
+        "task2-rag-eval/frontend",
+        "task3-agent/frontend"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "backend"
+    ]
+}

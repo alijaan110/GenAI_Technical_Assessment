@@ -1,0 +1,52 @@
+# Node artifacts
+node_modules/
+dist/
+build/
+.npm/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite
+*.db
+*.db-journal
+.python-version
+venv/
+.env*
+!.env.example
+
+# Editor/project files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+.DS_Store
+Thumbs.db
+
+# Coverage / test output
+coverage/
+.pytest_cache/
+htmlcov/
+
+# Build/temp files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Logs
+*.log
+
+# OS files
+Desktop.ini
+
+# Generated front-end artifacts
+*.gz
+*.br
