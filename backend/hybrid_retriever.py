@@ -122,7 +122,7 @@ def hybrid_retrieve(
     use_hybrid: bool = True,
     rrf_k: int = 60,
     over_fetch: int | None = None,
-    expand_queries: bool = True,
+    expand_queries: bool = False,
 ) -> List[HybridHit]:
     # Pull a wider over-fetch so RRF has more candidates.
     over_fetch = over_fetch or max(k * 6, 30)

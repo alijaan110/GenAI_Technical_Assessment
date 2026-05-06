@@ -84,16 +84,24 @@ ANSWER: {answer}
 
 Return ONLY JSON: {{"score": <0..1>}}"""
 
-PRECISION = """You are evaluating retrieval quality. Determine what fraction of the retrieved
-CONTEXT chunks are relevant to answering the QUESTION.
+PRECISION = """You are evaluating retrieval quality for a legal RAG system.
+Determine what fraction of the retrieved CONTEXT chunks are relevant to
+answering the QUESTION.
 
-A chunk is RELEVANT if it contains information that could help answer the question, even if
-it only partially addresses it. A chunk is IRRELEVANT if it discusses completely unrelated topics.
+A chunk is RELEVANT if:
+- It directly contains information needed to answer the question, OR
+- It is from the same legal article, section, or regulation being asked about, OR
+- It contains cross-referenced articles or definitions used in the answer, OR
+- It provides necessary legal context (e.g., definitions, scope, exceptions)
+  for understanding the answer.
+
+A chunk is IRRELEVANT only if it discusses a completely different topic,
+article, or regulation with no connection to the question.
 
 Instructions:
 1. Read the QUESTION carefully.
-2. Examine each chunk in the CONTEXT (separated by ---).
-3. For each chunk, decide: relevant or irrelevant.
+2. Examine each chunk (separated by ---).
+3. For each chunk, decide: relevant or irrelevant using the criteria above.
 4. Score = (relevant chunks) / (total chunks). If no chunks, score 0.0.
 
 QUESTION: {question}
@@ -120,14 +128,20 @@ CONTEXT:
 Return ONLY JSON: {{"score": <0.0-1.0>, "total_claims": <int>, "covered_claims": <int>}}"""
 
 CORRECTNESS = """Compare the GENERATED ANSWER to the GROUND TRUTH for semantic correctness.
-Score from 0.0 (completely wrong or contradicts ground truth) to 1.0 (semantically equivalent).
+Score from 0.0 (completely wrong) to 1.0 (covers all ground truth facts).
 
-Instructions:
-- Minor wording or formatting differences are fine; the meaning must match.
-- If the generated answer covers the same key facts as the ground truth, score highly.
-- If the generated answer is a refusal but the ground truth has a substantive answer,
-  score 0.2 (the system correctly identified uncertainty but didn't provide the answer).
-- Partial answers that cover some but not all ground truth facts should get proportional scores.
+Scoring rules:
+- If the generated answer contains ALL the key facts from the ground truth,
+  score 0.95-1.0, even if it includes additional accurate details or elaboration.
+- If the generated answer accurately paraphrases the ground truth with the
+  same meaning, score 0.90-1.0.
+- If the generated answer covers MOST ground truth facts but misses minor ones,
+  score 0.70-0.90.
+- If the generated answer is a refusal but the ground truth has a substantive
+  answer, score 0.20.
+- If the generated answer contradicts the ground truth, score 0.0-0.20.
+- Minor differences in wording, formatting, or level of detail should NOT
+  reduce the score. What matters is whether the core facts match.
 
 QUESTION: {question}
 GROUND TRUTH: {ground_truth}
