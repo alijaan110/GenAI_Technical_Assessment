@@ -70,8 +70,8 @@ def _parse_questions(raw: str) -> List[Dict]:
 
 async def auto_generate_test_set(
     *,
-    n_per_chunk: int = 2,
-    max_chunks: int = 10,
+    n_per_chunk: int = 1,
+    max_chunks: int = 14,
     document_id: Optional[str] = None,
 ) -> Dict:
     n_per_chunk = max(1, min(5, n_per_chunk))
@@ -111,7 +111,8 @@ async def auto_generate_test_set(
         )
         resp = await llm.ainvoke([HumanMessage(content=prompt)])
         raw = resp.content if isinstance(resp.content, str) else str(resp.content)
-        for q in _parse_questions(raw):
+        parsed = _parse_questions(raw)[:n_per_chunk]  # enforce strict limit
+        for q in parsed:
             q["source_doc"] = meta.get("source")
             q["source_page"] = r["page_number"] or meta.get("page")
             all_qs.append(q)

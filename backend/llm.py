@@ -28,8 +28,8 @@ _KEY_HELP = (
 def get_llm(
     settings: AppSettings | None = None,
     *,
-    temperature: float = 0.1,
-    max_tokens: int = 1500,
+    temperature: float = 0.0,
+    max_tokens: int = 2048,
 ):
     if settings is None:
         invalidate_cache()

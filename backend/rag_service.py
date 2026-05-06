@@ -62,15 +62,25 @@ class RagResult:
     session_id: Optional[str] = None
 
 
-# RRF scores for k=60 with two retrievers cap around 0.033 per list
-# (1/61 ≈ 0.0164). The threshold needs to be lower than a single rank-1 hit
-# from one retriever so a clearly relevant chunk that only the dense or
-# only the sparse side picks up still passes the gate.
+# Dense cosine similarity threshold — if the BEST chunk's dense score
+# is below this, the context is genuinely irrelevant and we should refuse
+# rather than let the LLM hallucinate from training knowledge.
+# 0.30 is conservative: typical relevant hits score 0.40-0.85.
+DENSE_RELEVANCE_THRESHOLD = 0.20
+
+# RRF threshold as fallback
 RRF_RELEVANCE_THRESHOLD = 0.010
 
 
 def _is_relevant(hits: List[HybridHit]) -> bool:
-    return bool(hits) and hits[0].rrf_score >= RRF_RELEVANCE_THRESHOLD
+    """Check if retrieved context is actually relevant to the query."""
+    if not hits:
+        return False
+    # Primary gate: dense cosine similarity of the best hit
+    best_dense = max((h.dense_score or 0.0) for h in hits[:3])
+    if best_dense < DENSE_RELEVANCE_THRESHOLD:
+        return False
+    return hits[0].rrf_score >= RRF_RELEVANCE_THRESHOLD
 
 
 def _is_grounded(answer: str) -> bool:
@@ -82,9 +92,14 @@ def _format_context(hits: List[HybridHit]) -> str:
     parts = []
     for i, h in enumerate(hits):
         m = h.metadata or {}
+        doc_type = m.get('doc_type', '')
+        jurisdiction = m.get('jurisdiction', '')
+        type_info = f", Type: {doc_type}" if doc_type and doc_type != 'document' else ""
+        juris_info = f", Jurisdiction: {jurisdiction}" if jurisdiction and jurisdiction != 'Unknown' else ""
         parts.append(
             f"[#{i + 1}] [Source: {m.get('source', 'unknown')}, "
-            f"Page {m.get('page', '?')}, Section {m.get('section', 'Unknown')}]\n"
+            f"Page {m.get('page', '?')}, Section {m.get('section', 'Unknown')}"
+            f"{type_info}{juris_info}]\n"
             f"{h.text.strip()}"
         )
     return "\n\n---\n\n".join(parts)
@@ -191,7 +206,7 @@ def _append_message(
 async def handle_rag_query(
     question: str,
     *,
-    top_k: int = 8,
+    top_k: int = 3,
     use_hybrid: bool = True,
     session_id: Optional[str] = None,
 ) -> RagResult:
@@ -348,7 +363,7 @@ async def handle_rag_query(
 async def stream_rag_query(
     question: str,
     *,
-    top_k: int = 8,
+    top_k: int = 3,
     use_hybrid: bool = True,
     session_id: Optional[str] = None,
 ) -> AsyncIterator[Dict]:

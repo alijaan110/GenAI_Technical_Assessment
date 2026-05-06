@@ -11,6 +11,7 @@ import {
     FileText,
     ChevronDown,
     ChevronRight,
+    Trash2,
 } from "lucide-react";
 import Markdown from "../../src/components/Markdown";
 
@@ -54,8 +55,8 @@ export default function EvalPage() {
     const [newA, setNewA] = useState("");
 
     const [genBusy, setGenBusy] = useState(false);
-    const [genCount, setGenCount] = useState(2);
-    const [genMaxChunks, setGenMaxChunks] = useState(8);
+    const [genCount, setGenCount] = useState(1);
+    const [genMaxChunks, setGenMaxChunks] = useState(14);
     const [toast, setToast] = useState<string | null>(null);
 
     const showToast = (msg: string) => {
@@ -135,6 +136,31 @@ export default function EvalPage() {
         }
     };
 
+    const deleteTestSet = async () => {
+        if (!activeSetId) return;
+        if (!confirm("Delete this test set and all its questions?")) return;
+        try {
+            await axios.delete(`/api/evaluation/test-questions/${activeSetId}`);
+            setActiveSetId("");
+            setQuestions([]);
+            await refreshSets();
+            showToast("Test set deleted.");
+        } catch (e: any) {
+            showToast(e.response?.data?.error || "Delete failed");
+        }
+    };
+
+    const deleteEvalRun = async (evalId: string) => {
+        if (!confirm("Delete this evaluation run?")) return;
+        try {
+            await axios.delete(`/api/evaluation/${evalId}`);
+            await refreshEvals();
+            showToast("Evaluation run deleted.");
+        } catch (e: any) {
+            showToast(e.response?.data?.error || "Delete failed");
+        }
+    };
+
     const runEvaluation = async () => {
         if (!activeSetId) return;
         try {
@@ -209,18 +235,30 @@ export default function EvalPage() {
                         <span className="text-xs text-text-dark/50">{sets.length} total</span>
                     </div>
 
-                    <select
-                        value={activeSetId}
-                        onChange={(e) => setActiveSetId(e.target.value)}
-                        className="w-full border border-primary/30 p-2 rounded-lg bg-secondary/10 text-sm mb-3"
-                    >
-                        <option value="">Select a set…</option>
-                        {sets.map((s) => (
-                            <option key={s.test_set_id} value={s.test_set_id}>
-                                {s.test_set_id.slice(0, 8)} · {s.count} Qs
-                            </option>
-                        ))}
-                    </select>
+                    <div className="flex items-center gap-2 mb-3">
+                        <select
+                            value={activeSetId}
+                            onChange={(e) => setActiveSetId(e.target.value)}
+                            className="flex-1 border border-primary/30 p-2 rounded-lg bg-secondary/10 text-sm"
+                        >
+                            <option value="">Select a set…</option>
+                            {sets.map((s) => (
+                                <option key={s.test_set_id} value={s.test_set_id}>
+                                    {s.test_set_id.slice(0, 8)} · {s.count} Qs
+                                </option>
+                            ))}
+                        </select>
+                        {activeSetId && (
+                            <button
+                                type="button"
+                                onClick={deleteTestSet}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete test set"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
 
                     <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
                         {questions.map((q, i) => (
@@ -302,7 +340,7 @@ export default function EvalPage() {
                 )}
                 <div className="space-y-3">
                     {evalList.map((ev) => (
-                        <EvalCard key={ev.id} ev={ev} onRefresh={refreshEvals} />
+                        <EvalCard key={ev.id} ev={ev} onRefresh={refreshEvals} onDelete={deleteEvalRun} />
                     ))}
                 </div>
             </main>
@@ -310,7 +348,7 @@ export default function EvalPage() {
     );
 }
 
-function EvalCard({ ev, onRefresh }: { ev: EvalRow; onRefresh: () => void }) {
+function EvalCard({ ev, onRefresh, onDelete }: { ev: EvalRow; onRefresh: () => void; onDelete: (id: string) => void }) {
     const [open, setOpen] = useState(false);
     const [details, setDetails] = useState<any>(null);
     const [loading, setLoading] = useState(false);
@@ -399,6 +437,17 @@ function EvalCard({ ev, onRefresh }: { ev: EvalRow; onRefresh: () => void }) {
                             <Download className="w-3.5 h-3.5" /> Report
                         </button>
                     )}
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete(ev.id);
+                        }}
+                        className="text-xs flex items-center gap-1 text-red-500 hover:text-red-700"
+                        title="Delete run"
+                    >
+                        <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                     <span className="text-[10px] uppercase font-semibold tracking-wider text-text-dark/50">
                         {ev.status}
                     </span>
@@ -489,10 +538,10 @@ function Metric({ label, v }: { label: string; v: number | undefined }) {
         pct == null
             ? "text-text-dark/40"
             : pct >= 85
-              ? "text-green-600"
-              : pct >= 70
-                ? "text-amber-600"
-                : "text-red-500";
+                ? "text-green-600"
+                : pct >= 70
+                    ? "text-amber-600"
+                    : "text-red-500";
     return (
         <div className="text-center">
             <div className={`font-semibold ${color}`}>{pct == null ? "–" : `${pct}%`}</div>
@@ -517,8 +566,8 @@ function Pill({ label, v }: { label: string; v: number | null | undefined }) {
         pct >= 85
             ? "bg-green-50 text-green-700 border-green-100"
             : pct >= 70
-              ? "bg-amber-50 text-amber-700 border-amber-100"
-              : "bg-red-50 text-red-600 border-red-100";
+                ? "bg-amber-50 text-amber-700 border-amber-100"
+                : "bg-red-50 text-red-600 border-red-100";
     return (
         <span className={`px-1.5 py-0.5 rounded border font-semibold ${color}`}>
             {label}: {pct}%

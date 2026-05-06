@@ -50,13 +50,21 @@ def _parse_json_score(raw: str, key: str) -> float:
     return _parse_score(raw)
 
 
-# ── Prompts (one per metric) ─────────────────────────────────────
-FAITHFULNESS = """You are a strict RAG evaluator. Decide whether the ANSWER is fully supported by the CONTEXT.
-Score from 0.0 (entirely fabricated / contradicted) to 1.0 (every claim grounded in context).
+# ── Prompts (one per metric) ─────────────────────────────────────────
+FAITHFULNESS = """You are evaluating whether a RAG system's answer is grounded in the provided context.
 
-Step 1: list the atomic factual claims in the answer.
-Step 2: for each claim, check whether the context supports it.
-Step 3: report final score.
+Task: Determine what fraction of the FACTUAL CLAIMS in the ANSWER are supported by the CONTEXT.
+
+Instructions:
+1. Extract every distinct factual claim from the ANSWER. Ignore formatting, citations references
+   like "[Source: ...]", markdown syntax, and transitional phrases. Focus ONLY on substantive
+   factual assertions.
+2. For each factual claim, determine if the CONTEXT contains information that supports it,
+   either verbatim or by reasonable paraphrase.
+3. If the answer is a polite refusal (e.g., "I couldn't find an answer"), score 1.0 since
+   no unsupported factual claims were made.
+4. Score = (number of supported claims) / (total number of factual claims).
+   If there are no factual claims, score 1.0.
 
 CONTEXT:
 {context}
@@ -64,43 +72,68 @@ CONTEXT:
 ANSWER:
 {answer}
 
-Return ONLY JSON: {{"score": <0..1>, "unsupported_claims": <int>}}"""
+Return ONLY JSON: {{"score": <0.0-1.0>, "total_claims": <int>, "supported_claims": <int>, "unsupported_claims": <int>}}"""
 
 RELEVANCY = """Determine whether the ANSWER directly addresses the QUESTION.
 Score from 0.0 (off-topic) to 1.0 (directly and fully answers).
+A polite refusal stating the information isn't available should score 0.5 (it addresses
+the question by acknowledging it cannot be answered from available sources).
 
 QUESTION: {question}
 ANSWER: {answer}
 
 Return ONLY JSON: {{"score": <0..1>}}"""
 
-PRECISION = """Decide what fraction of the retrieved CONTEXT chunks were actually relevant to the QUESTION.
-Score from 0.0 (none relevant) to 1.0 (every chunk relevant).
+PRECISION = """You are evaluating retrieval quality. Determine what fraction of the retrieved
+CONTEXT chunks are relevant to answering the QUESTION.
+
+A chunk is RELEVANT if it contains information that could help answer the question, even if
+it only partially addresses it. A chunk is IRRELEVANT if it discusses completely unrelated topics.
+
+Instructions:
+1. Read the QUESTION carefully.
+2. Examine each chunk in the CONTEXT (separated by ---).
+3. For each chunk, decide: relevant or irrelevant.
+4. Score = (relevant chunks) / (total chunks). If no chunks, score 0.0.
 
 QUESTION: {question}
 CONTEXT (chunks separated by ---):
 {context}
 
-Return ONLY JSON: {{"score": <0..1>, "relevant_chunks": <int>, "total_chunks": <int>}}"""
+Return ONLY JSON: {{"score": <0.0-1.0>, "relevant_chunks": <int>, "total_chunks": <int>}}"""
 
-RECALL = """Decide what fraction of the GROUND TRUTH answer is covered by the retrieved CONTEXT.
-Score from 0.0 (context misses everything) to 1.0 (context fully covers the ground truth).
+RECALL = """You are evaluating retrieval completeness. Determine what fraction of the
+information in the GROUND TRUTH answer can be found in the retrieved CONTEXT.
+
+Instructions:
+1. Break the GROUND TRUTH into distinct informational claims or facts.
+2. For each claim, check if the CONTEXT contains supporting information
+   (exact match or reasonable paraphrase).
+3. Score = (claims found in context) / (total claims in ground truth).
+4. Be generous: if the context contains the core substance of a claim
+   even in different wording, count it as covered.
 
 GROUND TRUTH: {ground_truth}
 CONTEXT:
 {context}
 
-Return ONLY JSON: {{"score": <0..1>}}"""
+Return ONLY JSON: {{"score": <0.0-1.0>, "total_claims": <int>, "covered_claims": <int>}}"""
 
 CORRECTNESS = """Compare the GENERATED ANSWER to the GROUND TRUTH for semantic correctness.
-Score from 0.0 (contradicts ground truth) to 1.0 (semantically equivalent).
-Minor wording differences are fine; the meaning must match.
+Score from 0.0 (completely wrong or contradicts ground truth) to 1.0 (semantically equivalent).
+
+Instructions:
+- Minor wording or formatting differences are fine; the meaning must match.
+- If the generated answer covers the same key facts as the ground truth, score highly.
+- If the generated answer is a refusal but the ground truth has a substantive answer,
+  score 0.2 (the system correctly identified uncertainty but didn't provide the answer).
+- Partial answers that cover some but not all ground truth facts should get proportional scores.
 
 QUESTION: {question}
 GROUND TRUTH: {ground_truth}
 GENERATED ANSWER: {answer}
 
-Return ONLY JSON: {{"score": <0..1>, "explanation": "<short reason>"}}"""
+Return ONLY JSON: {{"score": <0.0-1.0>, "explanation": "<short reason>"}}"""
 
 
 @dataclass
@@ -154,9 +187,23 @@ async def execute_evaluation(eval_id: str, test_set_id: str) -> None:
 
     for q in questions:
         try:
-            rag = await handle_rag_query(q["question"], top_k=5, use_hybrid=True)
+            rag = await handle_rag_query(q["question"], top_k=3, use_hybrid=True)
             answer = rag.answer
-            contexts = [s.excerpt for s in rag.sources]
+            # Use full chunk text from the DB for eval — the truncated 320-char
+            # excerpt hides content the LLM judge needs to verify faithfulness.
+            chunk_ids = [s.chunk_id for s in rag.sources]
+            full_texts: List[str] = []
+            if chunk_ids:
+                placeholders = ",".join("?" for _ in chunk_ids)
+                rows_full = db.execute(
+                    f"SELECT id, chunk_text FROM chunks WHERE id IN ({placeholders})",
+                    chunk_ids,
+                ).fetchall()
+                text_map = {r["id"]: r["chunk_text"] for r in rows_full}
+                full_texts = [text_map.get(cid, s.excerpt) for cid, s in zip(chunk_ids, rag.sources)]
+            else:
+                full_texts = [s.excerpt for s in rag.sources]
+            contexts = full_texts
             ctx_joined = "\n---\n".join(contexts) or "(no context retrieved)"
             gt = q["expected_answer"] or ""
 

@@ -50,3 +50,18 @@ Desktop.ini
 # Generated front-end artifacts
 *.gz
 *.br
+
+# Local database and runtime files
+*.db-shm
+*.db-wal
+*.sqlite
+*.db
+
+# Uploaded files and temporary data
+data/uploads/
+
+# Local tooling/debug output
+ghcheck*.txt
+push-output.txt
+status.txt
+wingetcheck.txt

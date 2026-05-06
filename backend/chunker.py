@@ -119,8 +119,8 @@ def chunk_pages(
     doc_name: str,
     doc_type: str,
     jurisdiction: str,
-    chunk_size: int = 1200,
-    chunk_overlap: int = 150,
+    chunk_size: int = 800,
+    chunk_overlap: int = 200,
 ) -> List[Chunk]:
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,

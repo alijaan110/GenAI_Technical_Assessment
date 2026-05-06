@@ -31,8 +31,8 @@ class TestQuestionsCreate(BaseModel):
 
 
 class AutoGenRequest(BaseModel):
-    n_per_chunk: Optional[int] = 2
-    max_chunks: Optional[int] = 10
+    n_per_chunk: Optional[int] = 1
+    max_chunks: Optional[int] = 14
     document_id: Optional[str] = None
 
 
@@ -167,3 +167,21 @@ def get_report(eval_id: str):
     if not row or not row["report_markdown"]:
         raise HTTPException(404, "No report")
     return PlainTextResponse(row["report_markdown"], media_type="text/markdown")
+
+
+@router.delete("/api/evaluation/test-questions/{set_id}")
+def delete_test_set(set_id: str):
+    db = get_db()
+    with db:
+        db.execute("DELETE FROM test_questions WHERE test_set_id = ?", (set_id,))
+    return {"success": True, "deleted_set": set_id}
+
+
+@router.delete("/api/evaluation/{eval_id}")
+def delete_evaluation(eval_id: str):
+    db = get_db()
+    with db:
+        db.execute("DELETE FROM evaluation_results WHERE evaluation_id = ?", (eval_id,))
+        db.execute("DELETE FROM evaluations WHERE id = ?", (eval_id,))
+    return {"success": True, "deleted_evaluation": eval_id}
+
