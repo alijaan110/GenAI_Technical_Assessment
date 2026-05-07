@@ -264,6 +264,53 @@ Through structured RAGAS-style evaluation, the system was aggressively optimized
 
 </details>
 
+---
+
+## 🎬 Agent Sample Runs (Task 3)
+
+1. **Ambiguous Query:** "What are the data privacy rules?" → Agent paused for HITL → User specified "GDPR for Companies" → Agent produced the following report.
+
+<details>
+<summary><b>View Agent Generated Output (Example Report)</b></summary>
+
+# Legal Research Report: Data Privacy Rules under GDPR for Companies
+
+## Executive Summary
+The General Data Protection Regulation (GDPR) is a pivotal legal framework that governs data privacy for individuals within the European Union (EU). It imposes stringent obligations on companies regarding the processing of personal data, emphasizing transparency, security, and the rights of data subjects.
+
+## Key Findings
+- **Lawfulness, Fairness, and Transparency**: Companies must process personal data in a lawful, fair, and transparent manner, ensuring that data subjects are informed about the use of their data.
+- **Rights of Data Subjects**: The GDPR grants individuals several rights, including the right to access, erasure, and data portability, which companies must respect and facilitate.
+
+## Detailed Analysis
+### Overview of GDPR
+The GDPR, effective from May 25, 2018, aims to enhance the protection of personal data for individuals within the EU. It applies to all companies that process personal data of EU residents, regardless of their geographical location. The regulation emphasizes the importance of lawful processing, purpose limitation, data minimization, accuracy, storage limitation, and integrity and confidentiality of personal data.
+
+### Key Regulations and Requirements
+1. **Lawfulness, Fairness, and Transparency**: Conduct processing lawfully and inform individuals.
+2. **Purpose Limitation**: especific purposes only.
+3. **Data Minimization**: Collect only necessary data.
+4. **Accuracy**: Maintain up-to-date status.
+5. **Storage Limitation**: Retain only as long as necessary.
+6. **Integrity and Confidentiality**: Implement appropriate security measures.
+
+## Risks & Open Questions
+- **Inconsistencies in Enforcement**: Application can vary across Member States.
+- **Ambiguity in Compliance**: Demonstrating legitimate basis for overriding objections can be challenging.
+
+## Recommendations
+1. **Conduct Regular Compliance Audits**.
+2. **Implement Comprehensive Training Programs**.
+3. **Establish Clear Data Processing Policies**.
+4. **Engage a Data Protection Officer**.
+
+</details>
+
+2. **Current Event Query:** "Latest 2024 AI liability rules" → Agent triggered Web Search → Combined result with indexed GDPR context.
+3. **Structured Report:** "Prepare a checklist for GDPR compliance" → Agent output a formatted Markdown checklist.
+
+---
+
 ### Optimization Journey
 1. **Hallucination elimination (42.9% → 0.0%)**: Similarity gate + Absolute grounding rules in `prompts.py`.
 2. **Recall maximization (0.457 → 1.000)**: Hierarchical chunking respecting legislative article structure.
@@ -271,7 +318,7 @@ Through structured RAGAS-style evaluation, the system was aggressively optimized
 
 ---
 
-## � Trade-offs & Notes
+## 📈 Trade-offs & Notes
 - **Qdrant vs In-memory** — The app probes Qdrant at startup; falls back to in-memory cosine store if unreachable.
 - **MemorySaver** — keeps the dependency footprint small while allowing full graph state recovery. All vectors persist in SQLite.
 - **BM25 vs Elasticsearch** — `rank-bm25` in-process for simplicity; ideal for single-document legal lookups.
